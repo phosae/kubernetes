@@ -189,6 +189,7 @@ func (dc *DeploymentController) getNewReplicaSet(d *apps.Deployment, rsList, old
 	podTemplateSpecHash := controller.ComputeHash(&newRSTemplate, d.Status.CollisionCount)
 	newRSTemplate.Labels = labelsutil.CloneAndAddLabel(d.Spec.Template.Labels, apps.DefaultDeploymentUniqueLabelKey, podTemplateSpecHash)
 	// Add podTemplateHash label to selector.
+	// 受 deploy 控制的 RS selector 会额外多一个 pod-template-hash label，用以控制属于自己的 Pod
 	newRSSelector := labelsutil.CloneSelectorAndAddLabel(d.Spec.Selector, apps.DefaultDeploymentUniqueLabelKey, podTemplateSpecHash)
 
 	// Create new ReplicaSet

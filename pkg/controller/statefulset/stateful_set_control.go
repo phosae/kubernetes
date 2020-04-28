@@ -81,6 +81,7 @@ func (ssc *defaultStatefulSetControl) UpdateStatefulSet(set *apps.StatefulSet, p
 	}
 	history.SortControllerRevisions(revisions)
 
+	// currentRevision: eureka-695657c4b5
 	currentRevision, updateRevision, err := ssc.performUpdate(set, pods, revisions)
 	if err != nil {
 		return utilerrors.NewAggregate([]error{err, ssc.truncateHistory(set, pods, revisions, currentRevision, updateRevision)})
@@ -297,7 +298,7 @@ func (ssc *defaultStatefulSetControl) updateStatefulSet(
 	// slice that will contain all Pods such that 0 <= getOrdinal(pod) < set.Spec.Replicas
 	replicas := make([]*v1.Pod, replicaCount)
 	// slice that will contain all Pods such that set.Spec.Replicas <= getOrdinal(pod)
-	condemned := make([]*v1.Pod, 0, len(pods))
+	condemned := make([]*v1.Pod, 0, len(pods)) // condemned 被判死刑的
 	unhealthy := 0
 	firstUnhealthyOrdinal := math.MaxInt32
 	var firstUnhealthyPod *v1.Pod
@@ -307,12 +308,17 @@ func (ssc *defaultStatefulSetControl) updateStatefulSet(
 		status.Replicas++
 
 		// count the number of running and ready replicas
+		// pod.Status.Phase == "Running" && pod.Status.PodCondition["Ready"].status=="True"
 		if isRunningAndReady(pods[i]) {
 			status.ReadyReplicas++
 		}
 
 		// count the number of current and update replicas
-		if isCreated(pods[i]) && !isTerminating(pods[i]) {
+		if isCreated(pods[i]) /* pod.Status.Phase!= "" */ &&
+			!isTerminating(pods[i]) /*pod.DeletionTimestamp == nil*/ {
+
+			// Pod label controller-revision-hash
+			// 不同版本 StatefulSet 会根据 controller-revision-hash label 维系 Pod 集合
 			if getPodRevision(pods[i]) == currentRevision.Name {
 				status.CurrentReplicas++
 			}
@@ -326,7 +332,7 @@ func (ssc *defaultStatefulSetControl) updateStatefulSet(
 			// insert it at the indirection of its ordinal
 			replicas[ord] = pods[i]
 
-		} else if ord >= replicaCount {
+		} else if ord >= replicaCount { // 例如 replica 3 -> replica 2
 			// if the ordinal is greater than the number of replicas add it to the condemned list
 			condemned = append(condemned, pods[i])
 		}
@@ -335,7 +341,7 @@ func (ssc *defaultStatefulSetControl) updateStatefulSet(
 
 	// for any empty indices in the sequence [0,set.Spec.Replicas) create a new Pod at the correct revision
 	for ord := 0; ord < replicaCount; ord++ {
-		if replicas[ord] == nil {
+		if replicas[ord] == nil { // scale up
 			replicas[ord] = newVersionedStatefulSetPod(
 				currentSet,
 				updateSet,
@@ -382,11 +388,12 @@ func (ssc *defaultStatefulSetControl) updateStatefulSet(
 		return &status, nil
 	}
 
-	monotonic := !allowsBurst(set)
+	monotonic := !allowsBurst(set) // OrderedReady(Default), Parallel(Burst)
 
 	// Examine each replica with respect to its ordinal
 	for i := range replicas {
 		// delete and recreate failed pods
+		// 交给下一条件创建
 		if isFailed(replicas[i]) {
 			ssc.recorder.Eventf(set, v1.EventTypeWarning, "RecreatingFailedPod",
 				"StatefulSet %s/%s is recreating failed Pod %s",
@@ -424,6 +431,8 @@ func (ssc *defaultStatefulSetControl) updateStatefulSet(
 			}
 
 			// if the set does not allow bursting, return immediately
+			// 如果是 OrderedReady(逐个) 模式，一次确保一个滚动发布成功
+			// 如果是 Parallel(Burst) 模式，一次处理中创建所有
 			if monotonic {
 				return &status, nil
 			}
@@ -432,6 +441,7 @@ func (ssc *defaultStatefulSetControl) updateStatefulSet(
 		}
 		// If we find a Pod that is currently terminating, we must wait until graceful deletion
 		// completes before we continue to make progress.
+		// 逐个发布模式，优雅删除，简单返回等下一轮事件
 		if isTerminating(replicas[i]) && monotonic {
 			klog.V(4).Infof(
 				"StatefulSet %s/%s is waiting for Pod %s to Terminate",
@@ -443,6 +453,7 @@ func (ssc *defaultStatefulSetControl) updateStatefulSet(
 		// If we have a Pod that has been created but is not running and ready we can not make progress.
 		// We must ensure that all for each Pod, when we create it, all of its predecessors, with respect to its
 		// ordinal, are Running and Ready.
+		// 逐个发布模式，保证每个 Pod 顺序发布，且是 Running & Ready
 		if !isRunningAndReady(replicas[i]) && monotonic {
 			klog.V(4).Infof(
 				"StatefulSet %s/%s is waiting for Pod %s to be Running and Ready",
@@ -456,6 +467,7 @@ func (ssc *defaultStatefulSetControl) updateStatefulSet(
 			continue
 		}
 		// Make a deep copy so we don't mutate the shared cache
+		// 最后，更新 StatefulSet 在 apiserver 中状态
 		replica := replicas[i].DeepCopy()
 		if err := ssc.podControl.UpdateStatefulPod(updateSet, replica); err != nil {
 			return &status, err
@@ -520,6 +532,7 @@ func (ssc *defaultStatefulSetControl) updateStatefulSet(
 		updateMin = int(*set.Spec.UpdateStrategy.RollingUpdate.Partition)
 	}
 	// we terminate the Pod with the largest ordinal that does not match the update revision.
+	// 所以 StatefulSet 的滚动发布从高位开始发，按照 n,..., 3, 2, 1 的顺序
 	for target := len(replicas) - 1; target >= updateMin; target-- {
 
 		// delete the Pod if it is not already terminating and does not match the update revision.

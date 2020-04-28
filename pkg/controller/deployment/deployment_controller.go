@@ -584,6 +584,9 @@ func (dc *DeploymentController) syncDeployment(key string) error {
 	// TODO: Deep-copy only when needed.
 	d := deployment.DeepCopy()
 
+	// 处理 label selector 为空的情况
+	// 如果请求 Generation(相当于 revision) 大于当前观察到 Generation
+	//     更新 Generation 和对应状态
 	everything := metav1.LabelSelector{}
 	if reflect.DeepEqual(d.Spec.Selector, &everything) {
 		dc.eventRecorder.Eventf(d, v1.EventTypeWarning, "SelectingAll", "This deployment is selecting all pods. A non-empty selector is required.")
@@ -610,6 +613,7 @@ func (dc *DeploymentController) syncDeployment(key string) error {
 		return err
 	}
 
+	// deployment 被删除的情况，具体待看
 	if d.DeletionTimestamp != nil {
 		return dc.syncStatusOnly(d, rsList)
 	}
@@ -621,6 +625,7 @@ func (dc *DeploymentController) syncDeployment(key string) error {
 		return err
 	}
 
+	// paused 处理，待看
 	if d.Spec.Paused {
 		return dc.sync(d, rsList)
 	}
@@ -629,9 +634,11 @@ func (dc *DeploymentController) syncDeployment(key string) error {
 	// revision so we should ensure that we won't proceed to update replica sets until we
 	// make sure that the deployment has cleaned up its rollback spec in subsequent enqueues.
 	if getRollbackTo(d) != nil {
+		// 回滚
 		return dc.rollback(d, rsList)
 	}
 
+	// scale rs
 	scalingEvent, err := dc.isScalingEvent(d, rsList)
 	if err != nil {
 		return err
@@ -640,6 +647,7 @@ func (dc *DeploymentController) syncDeployment(key string) error {
 		return dc.sync(d, rsList)
 	}
 
+	// 最后才是新增发布
 	switch d.Spec.Strategy.Type {
 	case apps.RecreateDeploymentStrategyType:
 		return dc.rolloutRecreate(d, rsList, podMap)
