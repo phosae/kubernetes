@@ -304,6 +304,7 @@ func PreInitRuntimeService(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		}
 	}
 
+	// 判断 CRI 是否为 docker, 是则启动 internal dockershim rpc server
 	switch containerRuntime {
 	case kubetypes.DockerContainerRuntime:
 		// TODO: These need to become arguments to a standalone docker shim.
@@ -353,6 +354,10 @@ func PreInitRuntimeService(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		return fmt.Errorf("unsupported CRI runtime: %q", containerRuntime)
 	}
 
+	// --container-runtime-endpoint, --image-service-endpoint
+	// * unix:///var/run/containerd/containerd.sock
+	// * unix:///var/run/crio/crio.sock
+	// * unix:///var/run/dockershim.sock
 	var err error
 	if kubeDeps.RemoteRuntimeService, err = remote.NewRemoteRuntimeService(remoteRuntimeEndpoint, kubeCfg.RuntimeRequestTimeout.Duration); err != nil {
 		return err

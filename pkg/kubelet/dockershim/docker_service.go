@@ -208,6 +208,8 @@ func NewDockerService(config *ClientConfig, podSandboxImage string, streamingCon
 			client:      client,
 			execHandler: &NativeExecHandler{},
 		},
+		// ContainerManager 是跨平台编译的 (利用注释 // +build windows // +build !linux,!windows)
+		// macOS 直接不支持
 		containerManager:          cm.NewContainerManager(cgroupsName, client),
 		checkpointManager:         checkpointManager,
 		startLocalStreamingServer: startLocalStreamingServer,

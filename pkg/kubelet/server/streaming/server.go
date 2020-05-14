@@ -236,6 +236,7 @@ func (s *server) Start(stayUp bool) error {
 		return errors.New("stayUp=false is not yet implemented")
 	}
 
+	// localhost:0
 	listener, err := net.Listen("tcp", s.config.Addr)
 	if err != nil {
 		return err

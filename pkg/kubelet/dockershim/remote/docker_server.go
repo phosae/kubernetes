@@ -51,11 +51,15 @@ func NewDockerServer(endpoint string, s dockershim.CRIService) *DockerServer {
 // Start starts the dockershim grpc server.
 func (s *DockerServer) Start() error {
 	// Start the internal service.
+	// 做两件事
+	// 1. 启动一个 Local Stream Server(listen localhost:0) 处理 exec, attach, port-forward (crictl???)
+	// 2. 启动 ContainerManager 做操作系统相关清理
 	if err := s.service.Start(); err != nil {
 		klog.Errorf("Unable to start docker service")
 		return err
 	}
 
+	// 创建 dockershim grpc listener，listen on /var/run/dockershim.sock
 	klog.V(2).Infof("Start dockershim grpc server")
 	l, err := util.CreateListener(s.endpoint)
 	if err != nil {
@@ -66,9 +70,13 @@ func (s *DockerServer) Start() error {
 		grpc.MaxRecvMsgSize(maxMsgSize),
 		grpc.MaxSendMsgSize(maxMsgSize),
 	)
+
+	// dockershim.CRIService.(runtimeapi.RuntimeServiceServer)
 	runtimeapi.RegisterRuntimeServiceServer(s.server, s.service)
+	// dockershim.CRIService.(runtimeapi.ImageServiceServer)
 	runtimeapi.RegisterImageServiceServer(s.server, s.service)
 	go func() {
+		// 基于 dockershim grpc listener 启动 rpc 服务
 		if err := s.server.Serve(l); err != nil {
 			klog.Fatalf("Failed to serve connections: %v", err)
 		}

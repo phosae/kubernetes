@@ -57,6 +57,7 @@ func CreateListener(endpoint string) (net.Listener, error) {
 	}
 
 	// Create the socket on a tempfile and move it to the destination socket to handle improprer cleanup
+	// trick !!! 貌似 unix 文件只要打开了就没有，listen 到文件句柄，然后 rename 到 dockershim.sock
 	file, err := ioutil.TempFile(filepath.Dir(addr), "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temporary file: %v", err)

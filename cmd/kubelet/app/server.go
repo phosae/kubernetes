@@ -761,6 +761,21 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, featureGate f
 		klog.Warning(err)
 	}
 
+	// 初始化 Container Runtime Context
+	// * 如果为 docker，启动 internal dockershim gRPC server
+	// * 如果是 containerd, crio 则不会启动 gRPC server，这是因为
+	// containerd 启动时就已自带 cri 插件
+	// /etc/containerd/config.toml
+	// [plugins]
+	//  [plugins.cri.containerd]
+	//    snapshotter = "overlayfs"
+	//    [plugins.cri.containerd.default_runtime]
+	//      runtime_type = "io.containerd.runtime.v1.linux"
+	//      runtime_engine = "/usr/local/bin/runc"
+	//      runtime_root = ""
+	// cri-o 的配置文件 /etc/crio/crio.conf 貌似直接指定了 gRPC server 配置，
+	// 综合看来，所有 CRI 提供者启动的 gRPC 服务均统一监听 unix:///var/run/CRI-impl/CRI-impl.sock，kubelet 只要连 sock 文件通信即可
+	// dockershim 应该是历史原因才内嵌在 kubelet 中
 	err = kubelet.PreInitRuntimeService(&s.KubeletConfiguration,
 		kubeDeps, &s.ContainerRuntimeOptions,
 		s.ContainerRuntime,
@@ -772,6 +787,7 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, featureGate f
 		return err
 	}
 
+	//todo read kubelet main path
 	if err := RunKubelet(s, kubeDeps, s.RunOnce); err != nil {
 		return err
 	}
