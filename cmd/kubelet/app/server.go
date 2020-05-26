@@ -463,11 +463,18 @@ func makeEventRecorder(kubeDeps *kubelet.Dependencies, nodeName types.NodeName) 
 	if kubeDeps.Recorder != nil {
 		return
 	}
+	// client ->-> Record ->-> EventBroadcaster ->-> watchers
 	eventBroadcaster := record.NewBroadcaster()
 	kubeDeps.Recorder = eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: componentKubelet, Host: string(nodeName)})
+	// add watcher, just log event at info level
 	eventBroadcaster.StartLogging(klog.V(3).Infof)
 	if kubeDeps.EventClient != nil {
 		klog.V(4).Infof("Sending events to api server.")
+		// kubeDeps.EventClient 的实现是 apiserver 的 RESTClient
+		// EventSinkImpl 包装了 RESTClient，并暴露 3 个方法: Create, Update, Patch
+		// watcher event handler 是 k8s.io/client-go/tools/record/event.go#recordToSink
+		//   recordToSink wrapper recordEvent, provide error and retry handling
+		//   所以发往 apiserver 的 event 实际全在 recordEvent 处理
 		eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: kubeDeps.EventClient.Events("")})
 	} else {
 		klog.Warning("No api server defined - no events will be sent to API server.")
@@ -638,6 +645,9 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, featureGate f
 	}
 
 	// Setup event recorder if required.
+	// 启动 kubelet 事件发布器，它有 2 个消费者，一个是日志组件，一个是 apiserver
+	// 应该是就是 kubelctl get events 和 kubelctl describe type/obj 中看到的客户端事件
+	// p.s k8s eventbroadcaster 是一个很好的订阅发布实现，可以抄出去用
 	makeEventRecorder(kubeDeps, nodeName)
 
 	if kubeDeps.ContainerManager == nil {
@@ -1079,6 +1089,7 @@ func RunKubelet(kubeServer *options.KubeletServer, kubeDeps *kubelet.Dependencie
 	// Setup event recorder if required.
 	makeEventRecorder(kubeDeps, nodeName)
 
+	// 包含一个单例模式实现
 	capabilities.Initialize(capabilities.Capabilities{
 		AllowPrivileged: true,
 	})
@@ -1090,6 +1101,7 @@ func RunKubelet(kubeServer *options.KubeletServer, kubeDeps *kubelet.Dependencie
 		kubeDeps.OSInterface = kubecontainer.RealOS{}
 	}
 
+	// 一个函数这么多参数不封装下么。。。
 	k, err := createAndInitKubelet(&kubeServer.KubeletConfiguration,
 		kubeDeps,
 		&kubeServer.ContainerRuntimeOptions,

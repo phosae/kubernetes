@@ -19,8 +19,6 @@ limitations under the License.
 package cm
 
 import (
-	"fmt"
-
 	"k8s.io/kubernetes/pkg/kubelet/dockershim/libdocker"
 )
 
@@ -33,5 +31,6 @@ func NewContainerManager(_ string, _ libdocker.Interface) ContainerManager {
 }
 
 func (m *unsupportedContainerManager) Start() error {
-	return fmt.Errorf("Container Manager is unsupported in this build")
+	return nil // 返回 nil 方便 Mac Debug 源码
+	//return fmt.Errorf("Container Manager is unsupported in this build")
 }
