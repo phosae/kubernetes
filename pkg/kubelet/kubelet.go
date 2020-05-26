@@ -221,7 +221,7 @@ type Dependencies struct {
 	Mounter                 mount.Interface
 	HostUtil                hostutil.HostUtils
 	OOMAdjuster             *oom.OOMAdjuster
-	OSInterface             kubecontainer.OSInterface
+	OSInterface             kubecontainer.OSInterface // OS 抽象接口，主要是方便 mock 各种文件接口
 	PodConfig               *config.PodConfig
 	Recorder                record.EventRecorder
 	Subpather               subpath.Interface
@@ -330,6 +330,7 @@ func PreInitRuntimeService(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		}
 
 		// The unix socket for kubelet <-> dockershim communication, dockershim start before runtime service init.
+		// dockershim = local grpc server wrapper for docker client
 		klog.V(5).Infof("RemoteRuntimeEndpoint: %q, RemoteImageEndpoint: %q",
 			remoteRuntimeEndpoint,
 			remoteImageEndpoint)
@@ -373,6 +374,7 @@ func PreInitRuntimeService(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 
 // NewMainKubelet instantiates a new Kubelet object along with all the required internal modules.
 // No initialization of Kubelet and its modules should happen here.
+// kubelet 核心启动逻辑
 func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	kubeDeps *Dependencies,
 	crOptions *config.ContainerRuntimeOptions,
@@ -596,6 +598,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		klog.Infof("Experimental host user namespace defaulting is enabled.")
 	}
 
+	// macOS 走到这里 gg (修改 container_manager_unsupported#Start 返回 nil 的情况)
 	machineInfo, err := klet.cadvisor.MachineInfo()
 	if err != nil {
 		return nil, err
