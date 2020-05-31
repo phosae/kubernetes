@@ -35,6 +35,9 @@ service RuntimeService {
     // Version returns the runtime name, runtime version, and runtime API version.
     rpc Version(VersionRequest) returns (VersionResponse) {}
 
+    // ----------------------------------------------------------
+    // ------------------- Pod 网络相关  start -------------------
+    // ----------------------------------------------------------
     // RunPodSandbox creates and starts a pod-level sandbox. Runtimes must ensure
     // the sandbox is in the ready state on success.
     rpc RunPodSandbox(RunPodSandboxRequest) returns (RunPodSandboxResponse) {}
@@ -87,6 +90,9 @@ service RuntimeService {
     // Once it returns error, new container log file MUST NOT be created.
     rpc ReopenContainerLog(ReopenContainerLogRequest) returns (ReopenContainerLogResponse) {}
 
+    // ----------------------------------------------------------
+    // -------------- Streaming Requests ---------------
+    // ----------------------------------------------------------
     // ExecSync runs a command in a container synchronously.
     rpc ExecSync(ExecSyncRequest) returns (ExecSyncResponse) {}
     // Exec prepares a streaming endpoint to execute a command in the container.
@@ -96,6 +102,9 @@ service RuntimeService {
     // PortForward prepares a streaming endpoint to forward ports from a PodSandbox.
     rpc PortForward(PortForwardRequest) returns (PortForwardResponse) {}
 
+    // ----------------------------------------------------------
+    // -------------- ContContainer Metrics start ---------------
+    // ----------------------------------------------------------
     // ContainerStats returns stats of the container. If the container does not
     // exist, the call returns an error.
     rpc ContainerStats(ContainerStatsRequest) returns (ContainerStatsResponse) {}
