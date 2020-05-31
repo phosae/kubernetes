@@ -285,6 +285,8 @@ func NewDockerService(config *ClientConfig, podSandboxImage string, streamingCon
 	return ds, nil
 }
 
+// runtimeapi.RuntimeServiceServer 实现在 docker_container.go
+// runtimeapi.ImageServiceServer 实现在 docker_image.go
 type dockerService struct {
 	client           libdocker.Interface
 	os               kubecontainer.OSInterface

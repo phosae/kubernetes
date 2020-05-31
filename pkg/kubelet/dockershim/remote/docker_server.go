@@ -49,10 +49,12 @@ func NewDockerServer(endpoint string, s dockershim.CRIService) *DockerServer {
 }
 
 // Start starts the dockershim grpc server.
+// 总共启动 2 个 server, local_stream_server 和 dockershim grpc server
 func (s *DockerServer) Start() error {
 	// Start the internal service.
 	// 做两件事
-	// 1. 启动一个 Local Stream Server(listen localhost:0) 处理 exec, attach, port-forward (crictl???)
+	// 1. 启动一个 Local Stream Server(listen localhost:0) 处理 exec, attach, port-forward
+	//     stream server 独立承担与 Pod 交互之类的任务，减轻了 kubelet 压力
 	// 2. 启动 ContainerManager 做操作系统相关清理
 	if err := s.service.Start(); err != nil {
 		klog.Errorf("Unable to start docker service")
